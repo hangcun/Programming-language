@@ -32,7 +32,7 @@
     (lambda () (f "dan.jpg"))))
 
 (define (stream-add-zero s)
-  (letrec ([f (lambda (x) (cons (cons 0 (car(s))) (lambda () (f (cdr(s))))))])
+  (letrec ([f (lambda (x) (cons (cons 0 (car(x))) (lambda () (f (cdr(x))))))])
     (lambda () (f s))))
 
 (define (cycle-lists xs ys)
@@ -83,34 +83,38 @@
   (letrec ([cached-vec (make-vector n #f)]
            [pos-mut 0]
            [lru-pos-vec (build-vector n values)]
+           [is-cache-full #f]
            [f (lambda (v)
                 (let* ([ans (vector-assoc v cached-vec)]
-                      [rr (vector-member ans cached-vec)])
+                      [index (vector-member ans cached-vec)])
                   (if ans
-                      ans
+                      (begin
+                        (when is-cache-full
+                            ((vector-copy! lru-pos-vec 
+                                          0 
+                                          (vector-append
+                                           (vector-filter-not 
+                                            (lambda (x) (= x index)) 
+                                            lru-pos-vec)
+                                           (vector index)) 
+                                          0 n))
+                            ans))
                       (let ([new-ans (assoc v xs)])
                         (begin 
                           (when new-ans
-                              (vector-set! cached-vec pos-mut new-ans)
-                              (set! pos-mut (remainder (add1 pos-mut) n)))
+                             (if is-cache-full
+                                (let ([lru-index (vector-ref lru-pos-vec 0)])
+                                 (begin
+                                  (vector-set! cached-vec lru-index new-ans)
+                                  ((vector-copy! lru-pos-vec 
+                                                 0 
+                                                 (vector-append
+                                                  (vector-take-right lru-pos-vec (- n 1))
+                                                  (vector lru-index))
+                                                 0 n))))
+                                (begin
+                                  (vector-set! cached-vec pos-mut new-ans)
+                                  (set! pos-mut (remainder (add1 pos-mut) n)))))
                           new-ans)))))])
   f))
-#|
-(define xs (list 1 2 3))
-(define ys (list "a" "b"))
-(stream-for-n-steps (cycle-lists xs ys) 10)
-(stream-for-n-steps (cycle-lists-challenge xs ys) 10)
-(define vec1 (vector (cons 1 1) (cons 2 2) (cons "a" "b")))
-(define vec2 (vector 1 2 3 4 5))
-(vector-assoc 1 vec1)
-(vector-assoc 2 vec1)
-(vector-assoc "a" vec1)
-(vector-assoc 3 vec1)
-(vector-assoc 1 vec2)
-(define lst (list (cons 1 1) (cons 2 2) (cons "a" "v")))
-((cached-assoc lst 3) 1)
-((cached-assoc lst 3) 1)
-(define a 2)
-(while-less 7 do (begin (set! a (+ a 1)) (print "x") a))
-(while-less 7 do (begin (set! a (+ a 1)) (print "x") a))
-|#
+
